@@ -247,7 +247,7 @@ def main():
     send("🤖 <b>Trading System ONLINE</b>\nSend /help for commands.")
     print("[MAIN] Running. Send /help to the bot. Ctrl+C to stop.")
 
-    offset = None
+    offset = 282935583  # Start fresh — skip all old messages
     while True:
         try:
             updates = get_updates(offset)
