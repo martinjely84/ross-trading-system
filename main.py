@@ -22,6 +22,8 @@ ET = pytz.timezone("America/New_York")
 
 # ── Global session object ──────────────────────────────────
 session = Session()
+session.update_id_offset = None  # Always reset offset on startup
+session.save()
 scheduler = BackgroundScheduler(timezone=ET)
 
 # ── Telegram command handler ───────────────────────────────
@@ -298,14 +300,13 @@ def main():
     scheduler.add_job(job_11am_cutoff,           "cron", hour=11, minute=0, id="11am")
     scheduler.add_job(job_daily_report,          "cron", hour=15, minute=30, id="daily_report")
     scheduler.add_job(job_weekly_report,         "cron", hour=16, minute=0, id="weekly_report")
-    scheduler.add_job(job_command_poll,          "interval", seconds=5, id="cmd_poll", max_instances=1, coalesce=True)
-
     scheduler.start()
     print("[MAIN] Scheduler running. Ctrl+C to stop.")
 
     try:
         while True:
-            time.sleep(1)
+            handle_commands()  # Run in main thread — no overlap
+            time.sleep(2)
     except (KeyboardInterrupt, SystemExit):
         print("[MAIN] Shutting down...")
         scheduler.shutdown()
