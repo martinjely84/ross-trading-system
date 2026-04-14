@@ -19,6 +19,7 @@ ET = pytz.timezone("America/New_York")
 
 session = Session()
 scheduler = BackgroundScheduler(timezone=ET)
+pending_signals = {}  # ticker -> signal, waiting for approval
 
 
 def send(text):
@@ -45,8 +46,38 @@ def get_updates(offset):
 
 
 def handle(text):
-    text = text.strip()
+    text = text.strip().lower()
     print(f"[CMD] {text}")
+
+    # Handle trade approvals
+    if text.startswith("/approve "):
+        ticker = text.split()[1].upper()
+        if ticker in pending_signals:
+            signal = pending_signals.pop(ticker)
+            from executor import buy_market
+            send(f"⏳ Placing BUY order: {signal['share_size']} shares of {ticker}...")
+            order = buy_market(ticker, signal['share_size'])
+            if order:
+                session.add_position(
+                    ticker, signal['entry_price'], signal['stop_loss'],
+                    signal['share_size'], signal['target1'], signal['target2'],
+                    signal['signal_type'], signal['conviction']
+                )
+                send(f"✅ <b>ORDER PLACED</b>\n{ticker} — {signal['share_size']} shares\nStop: ${signal['stop_loss']:.2f} | T1: ${signal['target1']:.2f} | T2: ${signal['target2']:.2f}")
+            else:
+                send(f"❌ Order failed for {ticker}. Check Webull manually.")
+        else:
+            send(f"❌ No pending signal for {ticker}")
+        return
+
+    if text.startswith("/reject "):
+        ticker = text.split()[1].upper()
+        if ticker in pending_signals:
+            pending_signals.pop(ticker)
+            send(f"🚫 Signal rejected for {ticker}")
+        return
+
+    text = text.strip()
 
     if text.startswith("/start"):
         parts = text.split()
@@ -155,7 +186,7 @@ def job_signals():
         return
     for stock in session.watchlist:
         ticker = stock["ticker"]
-        if ticker in session.open_positions:
+        if ticker in session.open_positions or ticker in pending_signals:
             continue
         signal, _ = evaluate_gap_and_go(ticker, session, stock)
         if not signal:
@@ -163,7 +194,7 @@ def job_signals():
         if signal:
             session.signals_today.append(signal)
             session.save()
-            # Format and send signal
+            pending_signals[ticker] = signal
             send(
                 f"🚨 <b>SIGNAL: {signal['signal_type']}</b>\n"
                 f"<b>{signal['ticker']}</b> [{signal['conviction']}] {et_now().strftime('%H:%M')} ET\n"
@@ -172,7 +203,8 @@ def job_signals():
                 f"🛑 STOP: ${signal['stop_loss']:.2f}\n"
                 f"📦 SIZE: {signal['share_size']} shares | Risk: ${signal['total_risk']:.2f}\n"
                 f"🎯 T1: ${signal['target1']:.2f} | T2: ${signal['target2']:.2f}\n"
-                f"📊 Loss used: ${signal['daily_loss_used']:.2f} / ${signal['daily_loss_limit']:.2f}"
+                f"📊 Loss used: ${signal['daily_loss_used']:.2f} / ${signal['daily_loss_limit']:.2f}\n\n"
+                f"Reply /approve {ticker} to execute or /reject {ticker} to skip"
             )
 
 def job_monitor():
