@@ -26,14 +26,17 @@ session.update_id_offset = None  # Always reset offset on startup
 session.save()
 scheduler = BackgroundScheduler(timezone=ET)
 
+# ── Telegram offset (in-memory, not from file) ─────────────
+_tg_offset = None
+
 # ── Telegram command handler ───────────────────────────────
 
 def handle_commands():
     """Poll Telegram for incoming commands from Martin."""
-    updates = tg.get_updates(offset=session.update_id_offset)
+    global _tg_offset
+    updates = tg.get_updates(offset=_tg_offset)
     for update in updates:
-        session.update_id_offset = update["update_id"] + 1
-        session.save()
+        _tg_offset = update["update_id"] + 1
 
         msg = update.get("message", {})
         text = msg.get("text", "").strip()
