@@ -34,7 +34,20 @@ _tg_offset = None
 def handle_commands():
     """Poll Telegram for incoming commands from Martin."""
     global _tg_offset
-    updates = tg.get_updates(offset=_tg_offset)
+    import requests as _req
+    try:
+        params = {"timeout": 0, "limit": 10}
+        if _tg_offset:
+            params["offset"] = _tg_offset
+        resp = _req.get(
+            f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}/getUpdates",
+            params=params, timeout=5
+        )
+        updates = resp.json().get("result", [])
+    except Exception as e:
+        print(f"[CMD] Poll error: {e}")
+        return
+
     for update in updates:
         _tg_offset = update["update_id"] + 1
 
