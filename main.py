@@ -322,7 +322,10 @@ def main():
 
     try:
         while True:
-            handle_commands()  # Run in main thread — no overlap
+            try:
+                handle_commands()
+            except Exception as e:
+                print(f"[CMD ERROR] {e}")
             time.sleep(2)
     except (KeyboardInterrupt, SystemExit):
         print("[MAIN] Shutting down...")
