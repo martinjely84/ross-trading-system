@@ -298,7 +298,7 @@ def main():
     scheduler.add_job(job_11am_cutoff,           "cron", hour=11, minute=0, id="11am")
     scheduler.add_job(job_daily_report,          "cron", hour=15, minute=30, id="daily_report")
     scheduler.add_job(job_weekly_report,         "cron", hour=16, minute=0, id="weekly_report")
-    scheduler.add_job(job_command_poll,          "interval", seconds=3, id="cmd_poll")
+    scheduler.add_job(job_command_poll,          "interval", seconds=5, id="cmd_poll", max_instances=1, coalesce=True)
 
     scheduler.start()
     print("[MAIN] Scheduler running. Ctrl+C to stop.")

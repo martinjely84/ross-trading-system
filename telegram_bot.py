@@ -93,7 +93,7 @@ def send_exit(exit_dict: dict):
 
 
 def get_updates(offset=None):
-    params = {"timeout": 5}
+    params = {"timeout": 1}
     if offset:
         params["offset"] = offset
     try:
