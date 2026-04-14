@@ -48,6 +48,7 @@ def handle_commands():
         print(f"[CMD] Poll error: {e}")
         return
 
+    print(f"[CMD] {len(updates)} updates, offset={_tg_offset}")
     for update in updates:
         _tg_offset = update["update_id"] + 1
 
