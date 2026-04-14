@@ -23,6 +23,7 @@ def today_str():
 class Session:
     def __init__(self):
         self.armed = False
+        self.chat_id = None
         self.account_value = 0.0
         self.daily_loss_limit = 0.0
         self.per_trade_risk = 0.0

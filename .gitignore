@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+session_state.json
+trade_log.csv
+weekly_log.json
+*.log
