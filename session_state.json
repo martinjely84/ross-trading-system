@@ -1,0 +1,15 @@
+{
+  "armed": false,
+  "account_value": 0.0,
+  "daily_loss_limit": 0.0,
+  "per_trade_risk": 0.0,
+  "halt_risk": 0.0,
+  "daily_loss_used": 0.0,
+  "trading_suspended": false,
+  "open_positions": {},
+  "trades_today": [],
+  "signals_today": [],
+  "watchlist": [],
+  "session_date": "2026-04-13",
+  "update_id_offset": null
+}
