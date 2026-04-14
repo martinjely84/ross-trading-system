@@ -93,14 +93,14 @@ def send_exit(exit_dict: dict):
 
 
 def get_updates(offset=None):
-    params = {"timeout": 1}
+    params = {"timeout": 0, "limit": 10}
     if offset:
         params["offset"] = offset
     try:
         resp = requests.get(
             f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}/getUpdates",
             params=params,
-            timeout=10
+            timeout=5
         )
         return resp.json().get("result", [])
     except Exception:
