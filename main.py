@@ -26,8 +26,23 @@ session.update_id_offset = None  # Always reset offset on startup
 session.save()
 scheduler = BackgroundScheduler(timezone=ET)
 
-# ── Telegram offset (in-memory, not from file) ─────────────
-_tg_offset = None
+# ── Telegram offset — skip old messages on startup ──────────
+def _get_fresh_offset():
+    import requests as _req
+    try:
+        resp = _req.get(
+            f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}/getUpdates",
+            params={"timeout": 0, "limit": 100},
+            timeout=5
+        )
+        results = resp.json().get("result", [])
+        if results:
+            return results[-1]["update_id"] + 1
+    except Exception:
+        pass
+    return None
+
+_tg_offset = _get_fresh_offset()
 
 # ── Telegram command handler ───────────────────────────────
 
