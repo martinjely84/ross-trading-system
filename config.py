@@ -4,7 +4,7 @@
 # ============================================================
 
 # --- Telegram ---
-TELEGRAM_TOKEN = "8552972103:AAFLF4cIROttXUt_3vF3lC94wOliGXfFh_Q"
+TELEGRAM_TOKEN = "8370287942:AAGKQPIbybD3WByLiF29aqg9NxnWXLWrH-Q"
 TELEGRAM_CHAT_ID = None  # Set automatically on first /start command
 
 # --- Trading Hours (Eastern) ---
