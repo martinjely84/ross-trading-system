@@ -216,12 +216,9 @@ def main():
     print("=" * 60)
     print("[MAIN] Starting up...")
 
-    # Skip all old pending messages
-    old = tg_updates(None)
+    # Start from scratch - process all pending messages
     offset = None
-    if old:
-        offset = old[-1]["update_id"] + 1
-        print(f"[MAIN] Skipped {len(old)} old messages, offset={offset}")
+    print(f"[MAIN] Ready to receive commands.")
 
     # Schedule jobs
     scheduler.add_job(job_premarket_scan,  "cron",     hour=8,  minute=0,  id="scan")
