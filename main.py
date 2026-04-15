@@ -305,12 +305,28 @@ def main():
     send("🤖 <b>Trading System ONLINE</b>\nSend /help for commands.")
     print("[MAIN] Running. Send /help to the bot. Ctrl+C to stop.")
 
-    offset = 282935583  # Start fresh — skip all old messages
+    # Load or initialize offset
+    offset_file = "/root/trading/.tg_offset"
+    try:
+        with open(offset_file) as f:
+            offset = int(f.read().strip())
+        print(f"[MAIN] Resuming from offset {offset}")
+    except Exception:
+        # First run — skip all pending old messages
+        updates = get_updates(None)
+        offset = updates[-1]["update_id"] + 1 if updates else None
+        print(f"[MAIN] First run, starting at offset {offset}")
+
     while True:
         try:
             updates = get_updates(offset)
             for u in updates:
                 offset = u["update_id"] + 1
+                try:
+                    with open(offset_file, "w") as f:
+                        f.write(str(offset))
+                except Exception:
+                    pass
                 msg = u.get("message", {})
                 text = msg.get("text", "")
                 if text:
