@@ -51,15 +51,6 @@ def handle(text):
     text = raw.lower()
     print(f"[CMD] {raw}")
 
-    # Try conversational understanding first (non-command messages)
-    if not raw.startswith("/"):
-        response = understand(raw, session)
-        if response:
-            send(response)
-        else:
-            send("I'm not sure what you mean. Try asking 'how are we doing?' or send /help")
-        return
-
     # Handle trade approvals
     if text.startswith("/approve "):
         ticker = text.split()[1].upper()
@@ -175,10 +166,18 @@ def handle(text):
             "/suspend — pause signals\n"
             "/resume — resume signals\n"
             "/report — daily report\n"
-            "/help — this menu"
+            "/help — this menu\n\n"
+            "Or just ask me anything naturally!"
         )
-    else:
+    elif raw.startswith("/"):
         send("❓ Unknown command. Send /help")
+    else:
+        # Conversational
+        response = understand(raw, session)
+        if response:
+            send(response)
+        else:
+            send("Not sure what you mean. Try 'how are we doing?' or send /help")
 
 
 # Scheduled jobs
