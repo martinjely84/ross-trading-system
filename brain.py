@@ -206,8 +206,102 @@ def analyze_and_improve(session):
     insights["latest_insight"] = insight_lines
     insights["last_updated"] = today
 
+    # Generate improvement suggestions
+    suggestions = generate_improvement_suggestions(insights)
+    if suggestions:
+        insights["latest_suggestions"] = suggestions
+
     _save_insights(insights)
+
+    # Combine insights + suggestions
+    if suggestions:
+        full = insight_lines + "\n\n🔧 <b>IMPROVEMENT SUGGESTIONS</b>\n" + "\n".join(suggestions)
+        return full
     return insight_lines
+
+
+def generate_improvement_suggestions(insights: dict) -> list:
+    """
+    Analyze patterns and generate specific improvement suggestions.
+    Only suggests things backed by actual data.
+    """
+    history = insights.get("history", {})
+    if len(history) < 2:
+        return []
+
+    suggestions = []
+
+    # Check if B setups are dragging performance
+    b_pnl = 0
+    b_trades = 0
+    aplus_pnl = 0
+    aplus_trades = 0
+    for d in history.values():
+        for conv, data in d.get("by_conviction", {}).items():
+            if conv == "B":
+                b_pnl += data["pnl"]
+                b_trades += data["trades"]
+            elif conv == "A+":
+                aplus_pnl += data["pnl"]
+                aplus_trades += data["trades"]
+
+    if b_trades >= 3 and b_pnl < 0:
+        suggestions.append(
+            f"💡 B-grade setups losing ${abs(b_pnl):.2f} over {b_trades} trades. "
+            f"Consider restricting to A+ and A only."
+        )
+
+    if aplus_trades >= 3 and b_trades >= 3:
+        aplus_avg = aplus_pnl / aplus_trades
+        b_avg = b_pnl / b_trades if b_trades > 0 else 0
+        if aplus_avg > b_avg * 2:
+            suggestions.append(
+                f"💡 A+ averaging ${aplus_avg:.2f}/trade vs ${b_avg:.2f} for B-grade. "
+                f"Strong case for A+ only after 10am."
+            )
+
+    # Win rate check
+    total_trades = sum(d["trades"] for d in history.values())
+    total_wins = sum(d["winners"] for d in history.values())
+    if total_trades >= 5:
+        win_rate = total_wins / total_trades
+        if win_rate < 0.45:
+            suggestions.append(
+                "💡 Win rate below 45%. A real-time news API (Benzinga ~$99/mo) "
+                "could improve catalyst quality and filter false gaps earlier."
+            )
+
+    # Setup type performance
+    setup_totals = {}
+    for d in history.values():
+        for setup, data in d.get("by_setup", {}).items():
+            if setup not in setup_totals:
+                setup_totals[setup] = {"trades": 0, "pnl": 0}
+            setup_totals[setup]["trades"] += data["trades"]
+            setup_totals[setup]["pnl"] += data["pnl"]
+
+    for setup, data in setup_totals.items():
+        if data["trades"] >= 3 and data["pnl"] < -5:
+            suggestions.append(
+                f"💡 {setup} setup underwater (${data['pnl']:.2f} over {data['trades']} trades). "
+                f"Consider reviewing entry criteria."
+            )
+
+    # Streak detection
+    recent_days = sorted(history.items())[-3:]
+    if len(recent_days) == 3:
+        if all(d["pnl"] > 0 for _, d in recent_days):
+            suggestions.append(
+                "💡 3 green days in a row — system performing well. "
+                "Consider increasing account size to capture more profit."
+            )
+        elif all(d["pnl"] < 0 for _, d in recent_days):
+            suggestions.append(
+                "⚠️ 3 red days in a row. Review watchlist quality "
+                "and confirm catalysts before market open."
+            )
+
+    return suggestions
 
 
 def _generate_insight_text(insights: dict) -> str:

@@ -169,6 +169,15 @@ def handle(text):
             "/help — this menu\n\n"
             "Or just ask me anything naturally!"
         )
+    elif text == "/suggestions":
+        from brain import _load_insights
+        insights = _load_insights()
+        suggestions = insights.get("latest_suggestions", [])
+        if suggestions:
+            send("🔧 <b>IMPROVEMENT SUGGESTIONS</b>\n" + "\n".join(suggestions))
+        else:
+            send("No suggestions yet — need a few sessions of data first.")
+
     elif raw.startswith("/"):
         send("❓ Unknown command. Send /help")
     else:
