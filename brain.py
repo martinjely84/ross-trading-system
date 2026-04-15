@@ -21,7 +21,7 @@ def understand(text: str, session) -> str:
     t = text.lower().strip()
 
     # Greetings
-    if any(w in t for w in ["hello", "hey", "hi ", "morning", "good morning"]):
+    if any(w in t for w in ["hello", "hey", "hi", "morning", "good morning", "you ok", "how are you"]):
         now = datetime.now(ET)
         hour = now.hour
         greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 17 else "Good evening"
