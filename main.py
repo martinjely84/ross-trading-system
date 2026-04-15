@@ -312,7 +312,6 @@ def main():
     scheduler.add_job(job_weekly,  "cron",     hour=16, minute=0)
     scheduler.start()
 
-    send("🤖 <b>Trading System ONLINE</b>\nSend /help for commands.")
     print("[MAIN] Running. Send /help to the bot. Ctrl+C to stop.")
 
     # Load or initialize offset

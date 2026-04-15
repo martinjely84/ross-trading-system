@@ -120,8 +120,12 @@ def understand(text: str, session) -> str:
             "Or use: /status /scan /watchlist /suspend /resume /report"
         )
 
+    # Positive / motivational
+    if any(w in t for w in ["good day", "great day", "good first", "first day", "should be", "gonna be", "going to be", "big day", "excited", "nervous", "fired up", "pumped"]):
+        return "Absolutely. Stick to the rules, trust the system, protect the capital. Let the setups come to you."
+
     # Ready / tomorrow
-    if any(w in t for w in ["ready", "tomorrow", "excited", "nervous", "lets go", "game plan", "fired up"]):
+    if any(w in t for w in ["ready", "tomorrow", "lets go", "game plan"]):
         if session.watchlist:
             top = session.watchlist[0]
             return "Ready! Top pick so far is {} (+{}% gap, {}). Market opens 8:30am CT.".format(
