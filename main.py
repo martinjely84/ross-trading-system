@@ -182,6 +182,7 @@ def handle(text):
     else:
         # Conversational
         response = understand(raw, session)
+        print(f"[BRAIN] '{raw}' -> '{response[:50] if response else None}'")
         if response:
             send(response)
         else:
