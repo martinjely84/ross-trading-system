@@ -28,7 +28,7 @@ def send(text):
         requests.post(
             f"https://api.telegram.org/bot{TOKEN}/sendMessage",
             json={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"},
-            timeout=5
+            timeout=15
         )
     except Exception as e:
         print(f"[SEND ERROR] {e}")
@@ -39,10 +39,9 @@ def get_updates(offset):
         params = {"timeout": 0, "limit": 10}
         if offset:
             params["offset"] = offset
-        r = requests.get(f"https://api.telegram.org/bot{TOKEN}/getUpdates", params=params, timeout=5)
+        r = requests.get(f"https://api.telegram.org/bot{TOKEN}/getUpdates", params=params, timeout=15)
         return r.json().get("result", [])
-    except Exception as e:
-        print(f"[POLL ERROR] {e}")
+    except Exception:
         return []
 
 
