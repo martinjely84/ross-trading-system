@@ -120,8 +120,24 @@ def understand(text: str, session) -> str:
             "Or use: /status /scan /watchlist /suspend /resume /report"
         )
 
+    # Ready / tomorrow
+    if any(w in t for w in ["ready", "tomorrow", "excited", "nervous", "lets go", "game plan", "fired up"]):
+        if session.watchlist:
+            top = session.watchlist[0]
+            return "Ready! Top pick so far is {} (+{}% gap, {}). Market opens 8:30am CT.".format(
+                top["ticker"], top["gap_pct"], top["conviction"])
+        return "Ready for tomorrow! Scan runs at 7am CT and I'll send the watchlist automatically."
+
+    # Good night / bye
+    if any(w in t for w in ["good night", "goodnight", "bye", "sleep", "night", "later", "see you"]):
+        return "Good night Martin! I'll be here at 7am CT with the watchlist. Sleep well."
+
+    # Thanks
+    if any(w in t for w in ["thanks", "thank you", "cheers", "appreciate"]):
+        return "Anytime! That's what I'm here for."
+
     # Fallback
-    return "Not sure about that one - but I'm here! Try asking about trades, P&L, or positions."
+    return "I'm still learning conversational stuff! Try: 'how are we doing', 'any positions', 'what day is it', or just say hey."
 
 
 def _pnl_summary(session) -> str:
