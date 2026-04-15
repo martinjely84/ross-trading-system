@@ -12,6 +12,7 @@ from scanner import run_premarket_scan, format_watchlist_message
 from monitor import monitor_all_positions
 from reports import generate_daily_report, generate_weekly_report
 from signals import evaluate_gap_and_go, evaluate_first_candle_new_high
+from brain import understand, analyze_and_improve
 
 TOKEN = "8370287942:AAGKQPIbybD3WByLiF29aqg9NxnWXLWrH-Q"
 CHAT_ID = 8620447966
@@ -46,8 +47,18 @@ def get_updates(offset):
 
 
 def handle(text):
-    text = text.strip().lower()
-    print(f"[CMD] {text}")
+    raw = text.strip()
+    text = raw.lower()
+    print(f"[CMD] {raw}")
+
+    # Try conversational understanding first (non-command messages)
+    if not raw.startswith("/"):
+        response = understand(raw, session)
+        if response:
+            send(response)
+        else:
+            send("I'm not sure what you mean. Try asking 'how are we doing?' or send /help")
+        return
 
     # Handle trade approvals
     if text.startswith("/approve "):
@@ -171,12 +182,30 @@ def handle(text):
 
 
 # Scheduled jobs
+def get_account_value():
+    """Get real account value from Webull, fall back to last known."""
+    try:
+        from executor import get_account
+        acct = get_account()
+        # Try to extract net liquidation value
+        for item in acct.get('accountMembers', []):
+            if item.get('key') == 'netLiquidation':
+                val = float(item['value'])
+                if val > 0:
+                    return val
+    except Exception as e:
+        print(f"[ACCOUNT] Could not fetch from Webull: {e}")
+    # Fall back to last known session value
+    return session.account_value if session.account_value > 0 else 500.0
+
+
 def job_scan():
-    # Auto-arm session every morning
-    session.arm(500.0)
+    # Get real account value from Webull
+    account_val = get_account_value()
+    session.arm(account_val)
     send(
         f"🌅 <b>GOOD MORNING — SESSION ARMED</b>\n"
-        f"Account: $500.00 | Daily limit: ${session.daily_loss_limit:.2f} | Risk/trade: ${session.per_trade_risk:.2f}\n"
+        f"Account: ${account_val:,.2f} | Daily limit: ${session.daily_loss_limit:.2f} | Risk/trade: ${session.per_trade_risk:.2f}\n"
         f"Running pre-market scan..."
     )
     wl = run_premarket_scan()
@@ -240,6 +269,10 @@ def job_11am():
 
 def job_report():
     generate_daily_report(session)
+    # Self-improvement analysis
+    insight = analyze_and_improve(session)
+    if insight:
+        send(f"\n🧠 <b>SYSTEM LEARNING</b>\n{insight}")
 
 def job_weekly():
     if et_now().weekday() == 4:
