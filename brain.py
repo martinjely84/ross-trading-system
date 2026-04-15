@@ -140,6 +140,10 @@ def understand(text: str, session) -> str:
     if any(w in t for w in ["thanks", "thank you", "cheers", "appreciate"]):
         return "Anytime! That's what I'm here for."
 
+    # Improvement reminders
+    if any(w in t for w in ["improve", "get better", "learn", "evolve", "upgrade", "continually"]):
+        return "Always. After every session I analyse what worked and what didn't, and flag improvements. Check /suggestions after a few trading days to see what I've learned."
+
     # Fallback
     return "I'm still learning conversational stuff! Try: 'how are we doing', 'any positions', 'what day is it', or just say hey."
 
