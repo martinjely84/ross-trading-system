@@ -24,14 +24,24 @@ pending_signals = {}  # ticker -> signal, waiting for approval
 
 
 def send(text):
-    try:
-        requests.post(
-            f"https://api.telegram.org/bot{TOKEN}/sendMessage",
-            json={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"},
-            timeout=15
-        )
-    except Exception as e:
-        print(f"[SEND ERROR] {e}")
+    import threading
+    def _send():
+        for attempt in range(3):
+            try:
+                r = requests.post(
+                    f"https://api.telegram.org/bot{TOKEN}/sendMessage",
+                    json={"chat_id": CHAT_ID, "text": text, "parse_mode": "HTML"},
+                    timeout=15
+                )
+                if r.status_code == 200:
+                    print(f"[SENT] {text[:60]}")
+                    return
+                else:
+                    print(f"[SEND FAIL] {r.status_code} {r.text[:80]}")
+            except Exception as e:
+                print(f"[SEND ERROR attempt {attempt+1}] {e}")
+                time.sleep(2)
+    threading.Thread(target=_send, daemon=True).start()
 
 
 def get_updates(offset):
