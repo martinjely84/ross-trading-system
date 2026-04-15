@@ -172,7 +172,13 @@ def handle(text):
 
 # Scheduled jobs
 def job_scan():
-    send("🌅 <b>PRE-MARKET SCAN STARTING</b>")
+    # Auto-arm session every morning
+    session.arm(500.0)
+    send(
+        f"🌅 <b>GOOD MORNING — SESSION ARMED</b>\n"
+        f"Account: $500.00 | Daily limit: ${session.daily_loss_limit:.2f} | Risk/trade: ${session.per_trade_risk:.2f}\n"
+        f"Running pre-market scan..."
+    )
     wl = run_premarket_scan()
     session.watchlist = wl
     session.save()
@@ -194,7 +200,8 @@ def job_signals():
         if signal:
             session.signals_today.append(signal)
             session.save()
-            pending_signals[ticker] = signal
+            # Full auto — place order immediately
+            from executor import buy_market
             send(
                 f"🚨 <b>SIGNAL: {signal['signal_type']}</b>\n"
                 f"<b>{signal['ticker']}</b> [{signal['conviction']}] {et_now().strftime('%H:%M')} ET\n"
@@ -203,9 +210,19 @@ def job_signals():
                 f"🛑 STOP: ${signal['stop_loss']:.2f}\n"
                 f"📦 SIZE: {signal['share_size']} shares | Risk: ${signal['total_risk']:.2f}\n"
                 f"🎯 T1: ${signal['target1']:.2f} | T2: ${signal['target2']:.2f}\n"
-                f"📊 Loss used: ${signal['daily_loss_used']:.2f} / ${signal['daily_loss_limit']:.2f}\n\n"
-                f"Reply /approve {ticker} to execute or /reject {ticker} to skip"
+                f"📊 Loss used: ${signal['daily_loss_used']:.2f} / ${signal['daily_loss_limit']:.2f}\n"
+                f"⚡ Placing order automatically..."
             )
+            order = buy_market(ticker, signal['share_size'])
+            if order:
+                session.add_position(
+                    ticker, signal['entry_price'], signal['stop_loss'],
+                    signal['share_size'], signal['target1'], signal['target2'],
+                    signal['signal_type'], signal['conviction']
+                )
+                send(f"✅ ORDER PLACED: {signal['share_size']} shares of {ticker}")
+            else:
+                send(f"❌ Order failed for {ticker} — check Webull manually")
 
 def job_monitor():
     if session.armed:
