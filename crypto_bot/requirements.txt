@@ -1,0 +1,9 @@
+# Crypto momentum bot — runtime + dev dependencies
+alpaca-py>=0.30.0
+pydantic>=2.7
+pydantic-settings>=2.3
+requests>=2.31.0
+python-dateutil>=2.9
+
+# Dev / test
+pytest>=8.0

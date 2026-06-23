@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ross Trading System — Process Flow</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #0e0e0e; color: #e0e0e0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 28px; line-height: 1.5; }
+  h1 { font-size: 1.5rem; color: #fff; margin-bottom: 4px; }
+  .sub { color: #777; font-size: 0.85rem; margin-bottom: 28px; }
+  h2 { font-size: 0.8rem; color: #2196f3; text-transform: uppercase; letter-spacing: 0.08em; margin: 34px 0 16px; border-bottom: 1px solid #222; padding-bottom: 8px; }
+  .lane { max-width: 920px; margin: 0 auto; }
+  .step { background: #141414; border: 1px solid #242424; border-left: 4px solid #444; border-radius: 8px; padding: 14px 18px; margin-bottom: 8px; }
+  .step .t { font-weight: 700; color: #ddd; font-size: 0.92rem; }
+  .step .time { display:inline-block; background:#1a2a3a; color:#2196f3; font-size:0.7rem; font-weight:700; padding:2px 8px; border-radius:10px; margin-right:8px; }
+  .step .d { color: #888; font-size: 0.82rem; margin-top: 4px; }
+  .arrow { text-align:center; color:#333; font-size:1.1rem; margin:2px 0; }
+  .blue   { border-left-color:#2196f3; }
+  .green  { border-left-color:#4caf50; }
+  .yellow { border-left-color:#ffc107; }
+  .red    { border-left-color:#f44336; }
+  .purple { border-left-color:#9c27b0; }
+  .gray   { border-left-color:#555; }
+  .guard { background:#0d0d0d; border:1px dashed #333; border-radius:6px; padding:8px 12px; margin:6px 0; font-size:0.78rem; color:#999; }
+  .guard b { color:#ffc107; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  @media(max-width:700px){ .grid2{ grid-template-columns:1fr; } }
+  .exit-box { background:#141414; border:1px solid #242424; border-radius:8px; padding:12px 14px; }
+  .exit-box .et { font-weight:700; font-size:0.82rem; margin-bottom:3px; }
+  .exit-box .ed { color:#777; font-size:0.76rem; }
+  .safety { background:#10160f; border:1px solid #1f3a1f; border-radius:8px; padding:14px 18px; margin-bottom:8px; }
+  .safety .t { color:#4caf50; font-weight:700; font-size:0.88rem; }
+  .safety .d { color:#9a9; font-size:0.8rem; margin-top:3px; }
+  .legend { display:flex; gap:18px; flex-wrap:wrap; margin-bottom:20px; font-size:0.75rem; color:#888; }
+  .legend span { display:flex; align-items:center; gap:6px; }
+  .dot { width:12px; height:12px; border-radius:3px; display:inline-block; }
+  code { background:#1a1a1a; padding:1px 6px; border-radius:4px; color:#7ec699; font-size:0.8rem; }
+</style>
+</head>
+<body>
+<div class="lane">
+
+  <h1>🎯 Ross Trading System — Process Flow</h1>
+  <div class="sub">Gap-and-go momentum bot · Alpaca paper trading · DigitalOcean VPS · updated after this week's hardening</div>
+
+  <div class="legend">
+    <span><span class="dot" style="background:#2196f3"></span> Setup / scan</span>
+    <span><span class="dot" style="background:#4caf50"></span> Entry</span>
+    <span><span class="dot" style="background:#ffc107"></span> Monitor</span>
+    <span><span class="dot" style="background:#f44336"></span> Exit</span>
+    <span><span class="dot" style="background:#9c27b0"></span> Close / report</span>
+  </div>
+
+  <!-- ============ STARTUP ============ -->
+  <h2>① Startup (every time the bot launches or restarts)</h2>
+
+  <div class="step gray">
+    <div class="t">🔒 Singleton enforcement</div>
+    <div class="d">Scans all running processes. Kills any other <code>main.py</code> instance, then writes its own PID. Guarantees exactly ONE bot — fixes the duplicate-message / duplicate-order problem.</div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="step gray">
+    <div class="t">🔄 Reconcile with Alpaca</div>
+    <div class="d">Compares Alpaca's live positions to what the session knows. Any position the bot doesn't track (an orphan from a crash) gets force-closed — never left unmonitored.</div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="step gray">
+    <div class="t">📡 Resume Telegram + scheduler</div>
+    <div class="d">Loads message offset, starts the job scheduler. Bot is live and listening.</div>
+  </div>
+
+  <!-- ============ MORNING ============ -->
+  <h2>② Morning routine (weekdays only — weekend &amp; holiday aware)</h2>
+
+  <div class="step blue">
+    <div class="t"><span class="time">8:00am ET</span> Clean up &amp; arm</div>
+    <div class="d">Closes any leftover positions from yesterday. Pulls real account balance from Alpaca. Sets risk limits (2% daily max, 0.5% per trade). Resets the day's counters.</div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="step blue">
+    <div class="t"><span class="time">8:00am ET</span> Pre-market scan</div>
+    <div class="d">Finviz finds stocks gapping up 2%+ on volume. Claude AI scores each catalyst 1–10 (earnings, FDA, contract). Scores under 4 dropped. Builds the watchlist ranked A+ / A / B. Also runs a gap-DOWN scan for short candidates.</div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="step blue">
+    <div class="t"><span class="time">8:30am ET</span> Watchlist sent to Telegram</div>
+    <div class="d">You see the day's candidates with gap %, volume, float, and catalyst.</div>
+  </div>
+
+  <!-- ============ ENTRY ============ -->
+  <h2>③ Entry logic (9:31–11:00am ET · every 30 seconds)</h2>
+
+  <div class="step green">
+    <div class="t">For each watchlist stock, check the gates in order ↓</div>
+  </div>
+
+  <div class="guard"><b>Gate 1 — State:</b> armed? not suspended? daily loss limit not hit?</div>
+  <div class="guard"><b>Gate 2 — Already traded?</b> Blocked if stopped out or lost on this stock today. Re-entry only allowed if last trade was profitable AND 20+ min ago.</div>
+  <div class="guard"><b>Gate 3 — Caps:</b> max 5 distinct tickers/day, max 3 open at once (counts open + in-flight).</div>
+  <div class="guard"><b>Gate 4 — Duplicate guards:</b> not already held, not in-flight, not on Alpaca (positions AND open orders), per-ticker buy lock acquired. <i>This is the XOS-fix layer.</i></div>
+  <div class="guard"><b>Gate 5 — Price valid &amp; in range.</b></div>
+  <div class="guard"><b>Gate 6 — ENTRY CRITERIA (the edge):</b> price above VWAP · last 1-min candle green · volume &gt; 1.5× prior 5 bars · not over-extended (&lt;5% above VWAP). Fails safe — skips if data missing.</div>
+
+  <div class="arrow">↓ all gates pass</div>
+  <div class="step green">
+    <div class="t">💰 Place market buy on Alpaca</div>
+    <div class="d">Marks ticker in-flight immediately (before fill confirms). Waits for the actual fill price. Uses the REAL filled quantity (handles partial fills — no oversell). Sizes position to 0.5% account risk.</div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="step green">
+    <div class="t">📐 Set stop &amp; targets from real fill</div>
+    <div class="d">Stop = 2% below fill · Target 1 = +1.5R · Target 2 = +3R. Logged to session + Telegram. One new trade per 30-sec cycle.</div>
+  </div>
+
+  <!-- ============ MONITOR ============ -->
+  <h2>④ Position monitor (every 5 seconds, monitor-only stops)</h2>
+
+  <div class="step yellow">
+    <div class="t">⚙️ One stop system — the monitor watches price and fires market sells</div>
+    <div class="d">No broker-held stop orders. This eliminates the double-fire / oversell-into-short bug. Every exit is locked so two cycles can't both sell the same position.</div>
+  </div>
+  <div class="arrow">↓ checks each tick</div>
+
+  <div class="grid2">
+    <div class="exit-box"><div class="et" style="color:#f44336">🛑 Stop Loss</div><div class="ed">Price below stop → sell all. Loss capped ~1R.</div></div>
+    <div class="exit-box"><div class="et" style="color:#f44336">📉 VWAP Break</div><div class="ed">Drops below VWAP (after 3-min grace) → sell all.</div></div>
+    <div class="exit-box"><div class="et" style="color:#4caf50">🎯 Target 1 (+1.5R)</div><div class="ed">Sell 50%, move stop to breakeven.</div></div>
+    <div class="exit-box"><div class="et" style="color:#4caf50">🎯 Target 2 (+3R)</div><div class="ed">Sell 25%, runner continues.</div></div>
+    <div class="exit-box"><div class="et" style="color:#9c27b0">🏃 Runner Exit</div><div class="ed">VWAP break / EMA loss / lower-low on runner.</div></div>
+    <div class="exit-box"><div class="et" style="color:#ffc107">⏱️ Time Stop</div><div class="ed">15 min, no progress to T1 → warning.</div></div>
+  </div>
+
+  <!-- ============ CLOSE ============ -->
+  <h2>⑤ Window close &amp; reporting</h2>
+
+  <div class="step red">
+    <div class="t"><span class="time">11:00am ET</span> Hard cutoff</div>
+    <div class="d">Force-closes ALL Alpaca positions (checks real positions, not just session — catches orphans). Trading window closed. Fires once (locked).</div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="step purple">
+    <div class="t"><span class="time">12:00pm ET</span> Daily report</div>
+    <div class="d">One report (locked). Trade breakdown by conviction, real fill prices, correct R-multiples. Claude AI reviews the day and suggests improvements.</div>
+  </div>
+  <div class="arrow">↓</div>
+  <div class="step purple">
+    <div class="t"><span class="time">3:55pm ET</span> End-of-day safety close</div>
+    <div class="d">Any position still open (shouldn't be) is closed. Fires once.</div>
+  </div>
+
+  <!-- ============ SAFETY ============ -->
+  <h2>🛡️ Safety mechanisms (always on)</h2>
+
+  <div class="safety"><div class="t">Singleton lock</div><div class="d">Only one bot can ever run — no duplicate orders or messages.</div></div>
+  <div class="safety"><div class="t">Daily loss limit (2%)</div><div class="d">Trading auto-suspends if cumulative losses hit the limit.</div></div>
+  <div class="safety"><div class="t">Position &amp; ticker caps</div><div class="d">Max 3 open at once, max 5 distinct stocks/day — no runaway buying.</div></div>
+  <div class="safety"><div class="t">No-revenge rule</div><div class="d">Can't re-enter a stock after a stop-out or loss the same day.</div></div>
+  <div class="safety"><div class="t">Reconcile on restart</div><div class="d">Orphaned positions get closed automatically on every boot.</div></div>
+  <div class="safety"><div class="t">Confirmed fills only</div><div class="d">Positions are logged at the real Alpaca fill price &amp; quantity, never an estimate.</div></div>
+  <div class="safety"><div class="t">Telegram authorization</div><div class="d">Only your chat ID can send commands.</div></div>
+  <div class="safety"><div class="t">15-test regression suite</div><div class="d">Every past failure is a permanent test — run before any live session.</div></div>
+
+  <h2>📲 Manual controls (Telegram / dashboard)</h2>
+  <div class="step gray"><div class="d"><code>/status</code> · <code>/watchlist</code> · <code>/scan</code> · <code>/close TICKER</code> · <code>/suspend</code> · <code>/resume</code> · <code>/report</code> &nbsp;|&nbsp; Dashboard buttons: Arm · Disarm · Suspend · Resume · Close All</div></div>
+
+  <div class="sub" style="margin-top:34px; text-align:center;">Two strategies run in parallel: <b style="color:#4caf50">long gap-and-go</b> and <b style="color:#f44336">gap-down / VWAP-fade short</b>. An optional <b style="color:#2196f3">options bot</b> trades calls on the same A/A+ watchlist using the shared account.</div>
+
+</div>
+</body>
+</html>

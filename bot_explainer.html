@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>How the Trading Bot Makes Money</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 11pt;
+    line-height: 1.7;
+    color: #1a1a2e;
+    background: #fff;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 48px 48px;
+  }
+
+  /* ── Cover ── */
+  .cover {
+    text-align: center;
+    padding: 60px 0 50px;
+    border-bottom: 3px solid #e8eaf0;
+    margin-bottom: 48px;
+  }
+  .cover-badge {
+    display: inline-block;
+    background: #1a3a6a;
+    color: #fff;
+    font-size: 8pt;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 5px 16px;
+    border-radius: 20px;
+    margin-bottom: 20px;
+  }
+  .cover h1 {
+    font-size: 28pt;
+    font-weight: 700;
+    color: #1a1a2e;
+    line-height: 1.2;
+    margin-bottom: 16px;
+  }
+  .cover h1 span { color: #2563eb; }
+  .cover .subtitle {
+    font-size: 12pt;
+    color: #64748b;
+    max-width: 500px;
+    margin: 0 auto 28px;
+  }
+  .cover .meta {
+    font-size: 9pt;
+    color: #94a3b8;
+  }
+
+  /* ── Section headings ── */
+  h2 {
+    font-size: 16pt;
+    font-weight: 700;
+    color: #1a1a2e;
+    margin: 40px 0 8px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #e2e8f0;
+  }
+  h2 .num {
+    display: inline-block;
+    background: #2563eb;
+    color: #fff;
+    font-size: 9pt;
+    font-weight: 700;
+    width: 24px; height: 24px;
+    line-height: 24px;
+    text-align: center;
+    border-radius: 50%;
+    margin-right: 10px;
+    vertical-align: middle;
+  }
+  h3 {
+    font-size: 12pt;
+    font-weight: 600;
+    color: #1e3a5f;
+    margin: 24px 0 8px;
+  }
+
+  p { margin-bottom: 12px; }
+
+  /* ── Callout boxes ── */
+  .box {
+    border-radius: 10px;
+    padding: 16px 20px;
+    margin: 20px 0;
+    border-left: 4px solid;
+  }
+  .box-blue  { background: #eff6ff; border-color: #2563eb; }
+  .box-green { background: #f0fdf4; border-color: #16a34a; }
+  .box-amber { background: #fffbeb; border-color: #d97706; }
+  .box-red   { background: #fef2f2; border-color: #dc2626; }
+  .box-title { font-weight: 700; font-size: 10pt; margin-bottom: 6px; }
+  .box-blue  .box-title { color: #1d4ed8; }
+  .box-green .box-title { color: #15803d; }
+  .box-amber .box-title { color: #b45309; }
+  .box-red   .box-title { color: #b91c1c; }
+
+  /* ── Example trade ── */
+  .trade-example {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 20px 0;
+  }
+  .trade-example h4 {
+    font-size: 11pt;
+    font-weight: 700;
+    color: #1e3a5f;
+    margin-bottom: 14px;
+  }
+  .trade-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 7px 0;
+    border-bottom: 1px solid #e8edf3;
+    font-size: 10pt;
+  }
+  .trade-row:last-child { border-bottom: none; }
+  .trade-row .lbl { color: #64748b; }
+  .trade-row .val { font-weight: 600; }
+  .val-green { color: #16a34a; }
+  .val-red   { color: #dc2626; }
+  .val-blue  { color: #2563eb; }
+
+  /* ── Timeline ── */
+  .timeline { margin: 20px 0; }
+  .tl-item {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+    align-items: flex-start;
+  }
+  .tl-dot {
+    min-width: 36px; height: 36px;
+    border-radius: 50%;
+    background: #2563eb;
+    color: #fff;
+    font-weight: 700;
+    font-size: 9pt;
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 2px;
+  }
+  .tl-dot.green { background: #16a34a; }
+  .tl-dot.amber { background: #d97706; }
+  .tl-dot.red   { background: #dc2626; }
+  .tl-body strong { display: block; font-size: 10pt; color: #1e3a5f; }
+  .tl-body { font-size: 10pt; color: #475569; line-height: 1.6; }
+
+  /* ── Tag chips ── */
+  .tag {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 9pt;
+    font-weight: 700;
+    margin-right: 6px;
+  }
+  .tag-aplus { background: #dcfce7; color: #15803d; }
+  .tag-a     { background: #dbeafe; color: #1d4ed8; }
+  .tag-b     { background: #fef3c7; color: #92400e; }
+
+  /* ── Grid ── */
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin: 20px 0;
+  }
+  .grid-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 16px;
+  }
+  .grid-card .gc-label { font-size: 9pt; color: #64748b; font-weight: 500; margin-bottom: 4px; }
+  .grid-card .gc-value { font-size: 15pt; font-weight: 700; color: #1e3a5f; }
+  .grid-card .gc-sub   { font-size: 9pt; color: #94a3b8; margin-top: 2px; }
+
+  /* ── Summary table ── */
+  table { width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 10pt; }
+  th { background: #1e3a5f; color: #fff; padding: 9px 12px; text-align: left; font-weight: 600; }
+  td { padding: 9px 12px; border-bottom: 1px solid #e8edf3; }
+  tr:nth-child(even) td { background: #f8fafc; }
+
+  /* ── Page breaks ── */
+  .page-break { page-break-after: always; }
+
+  /* ── Footer ── */
+  .footer {
+    margin-top: 60px;
+    padding-top: 20px;
+    border-top: 1px solid #e2e8f0;
+    text-align: center;
+    font-size: 8.5pt;
+    color: #94a3b8;
+  }
+
+  /* ── Print ── */
+  @media print {
+    body { padding: 0; max-width: 100%; }
+    .page-break { page-break-after: always; }
+  }
+</style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-badge">Automated Trading System</div>
+  <h1>How the Bot<br><span>Makes Money</span></h1>
+  <p class="subtitle">A plain-English guide to the gap-and-go momentum strategy — no experience needed.</p>
+  <p class="meta">Ross Trading System &nbsp;·&nbsp; Paper Trading &nbsp;·&nbsp; 2026</p>
+</div>
+
+
+<!-- SECTION 1 -->
+<h2><span class="num">1</span> The Very Basics</h2>
+
+<p>Before we explain the bot, here are the two things you need to understand about stocks.</p>
+
+<h3>What is a stock?</h3>
+<p>A stock is a tiny slice of ownership in a company. When a company like Apple goes public, it splits itself into millions of tiny pieces called <strong>shares</strong>. You can buy a share for, say, $180 — and if more people want to own Apple, the price of your share goes up. If fewer people want it, the price drops.</p>
+<p>The bot trades stocks that are moving fast — it buys them, waits a few minutes for the price to go up, then sells them for a profit.</p>
+
+<h3>How do you actually make money?</h3>
+
+<div class="trade-example">
+  <h4>A simple example</h4>
+  <div class="trade-row"><span class="lbl">Buy 1,000 shares at</span><span class="val val-blue">$5.00 per share</span></div>
+  <div class="trade-row"><span class="lbl">Sell 1,000 shares at</span><span class="val val-blue">$5.30 per share</span></div>
+  <div class="trade-row"><span class="lbl">Profit per share</span><span class="val">$0.30</span></div>
+  <div class="trade-row"><span class="lbl">Total profit</span><span class="val val-green">+$300</span></div>
+  <div class="trade-row"><span class="lbl">Time taken</span><span class="val">~8 minutes</span></div>
+</div>
+
+<p>The bot does this automatically — buying and selling in seconds or minutes, without any manual input during the trade.</p>
+
+<div class="page-break"></div>
+
+
+<!-- SECTION 2 -->
+<h2><span class="num">2</span> What is a Gap?</h2>
+
+<p>Stock markets close at 4pm and reopen at 9:30am the next morning. Overnight, news can come out — earnings reports, FDA drug approvals, CEO announcements — and by the time the market opens, a stock's price can jump significantly. This jump is called a <strong>gap up</strong>.</p>
+
+<div class="box box-blue">
+  <div class="box-title">Real example</div>
+  A small biotech company announces that the FDA approved their new drug at 7am. The stock closed yesterday at $3.00. When the market opens at 9:30am it immediately starts trading at $5.50 — a gap up of 83%. Traders rush to buy it, pushing the price even higher.
+</div>
+
+<h3>Why do gaps matter?</h3>
+<p>When a stock gaps up significantly, it creates a surge of buying activity right at the open (9:30am). The momentum can carry the price up 20%, 50%, even 100% within the first hour. The bot is designed to catch this momentum wave in the first 90 minutes of trading — before it fades.</p>
+
+<div class="grid-2">
+  <div class="grid-card">
+    <div class="gc-label">Typical gap size the bot targets</div>
+    <div class="gc-value">20%+</div>
+    <div class="gc-sub">Gap up from previous close</div>
+  </div>
+  <div class="grid-card">
+    <div class="gc-label">Trading window</div>
+    <div class="gc-value">9:30–11am</div>
+    <div class="gc-sub">Eastern Time (2:30–4pm UK)</div>
+  </div>
+  <div class="grid-card">
+    <div class="gc-label">Typical stock price</div>
+    <div class="gc-value">$1–$20</div>
+    <div class="gc-sub">Lower-priced stocks move more</div>
+  </div>
+  <div class="grid-card">
+    <div class="gc-label">Average hold time</div>
+    <div class="gc-value">5–30 min</div>
+    <div class="gc-sub">Never holds overnight</div>
+  </div>
+</div>
+
+
+<!-- SECTION 3 -->
+<h2><span class="num">3</span> The Strategy: Gap and Go</h2>
+
+<p>The bot follows a strategy pioneered by professional trader <strong>Ross Cameron</strong> of Warrior Trading. It is called <strong>Gap and Go</strong>. The idea is simple:</p>
+
+<ol style="margin: 0 0 16px 24px; line-height: 2;">
+  <li>Find a stock that has <strong>gapped up sharply</strong> on strong news overnight.</li>
+  <li>Wait for the market to open and confirm that buyers are still pushing the price higher.</li>
+  <li>Enter the trade at a <strong>key price level</strong> (a breakout).</li>
+  <li>Let the momentum carry the price up for a defined profit target.</li>
+  <li>Exit before the momentum runs out.</li>
+</ol>
+
+<p>The bot does all of this automatically — scanning hundreds of stocks pre-market, shortlisting the best candidates, and then executing trades in real-time.</p>
+
+<div class="box box-green">
+  <div class="box-title">Why this strategy works</div>
+  Human emotions drive stock prices in the short term. When a stock surges on big news, fear of missing out (FOMO) causes more and more buyers to pile in, pushing the price higher in a predictable wave. The bot is designed to ride this wave systematically — without emotion.
+</div>
+
+<div class="page-break"></div>
+
+
+<!-- SECTION 4 -->
+<h2><span class="num">4</span> How the Bot Picks Stocks Each Morning</h2>
+
+<p>From 4am onwards (before the US market opens), the bot runs a pre-market scan. It looks at hundreds of stocks and filters them down using strict criteria:</p>
+
+<div class="timeline">
+  <div class="tl-item">
+    <div class="tl-dot">1</div>
+    <div class="tl-body">
+      <strong>Gap size</strong>
+      The stock must have gapped up at least 10–20% from yesterday's close. Small gaps are ignored — not enough momentum.
+    </div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot">2</div>
+    <div class="tl-body">
+      <strong>Trading volume</strong>
+      Hundreds of thousands of shares must already be trading pre-market. Low volume means no one cares — the move won't last.
+    </div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot">3</div>
+    <div class="tl-body">
+      <strong>Float (supply of shares)</strong>
+      The bot prefers stocks with a small <em>float</em> — meaning there are fewer shares available to buy. When demand surges but supply is limited, prices spike harder.
+    </div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot green">4</div>
+    <div class="tl-body">
+      <strong>Catalyst (the reason)</strong>
+      There must be a real reason for the gap — FDA approval, earnings beat, merger news, government contract. Stocks that gap up for no reason don't hold their gains.
+    </div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot green">5</div>
+    <div class="tl-body">
+      <strong>Relative volume</strong>
+      Is today's volume unusually high compared to a normal day? The bot requires at least 2–3× the normal volume, confirming this is a significant event.
+    </div>
+  </div>
+</div>
+
+<p>The result is a shortlist of 1–4 stocks — the <strong>watchlist</strong> for the day. These are sent to you via Telegram each morning at 9:15am ET.</p>
+
+
+<!-- SECTION 5 -->
+<h2><span class="num">5</span> Conviction Ratings: A+, A and B</h2>
+
+<p>Not every trade opportunity is equally good. The bot rates each setup on a scale:</p>
+
+<table>
+  <tr>
+    <th>Rating</th>
+    <th>What it means</th>
+    <th>Position size</th>
+  </tr>
+  <tr>
+    <td><span class="tag tag-aplus">A+</span></td>
+    <td>Perfect setup — strong catalyst, small float, high volume, clean chart. Everything lines up.</td>
+    <td>Full size (100%)</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-a">A</span></td>
+    <td>Strong setup — most criteria met, one or two minor weaknesses.</td>
+    <td>Full size (100%)</td>
+  </tr>
+  <tr>
+    <td><span class="tag tag-b">B</span></td>
+    <td>Decent setup — meets the basics but lacks some conviction. Entered with caution.</td>
+    <td>Half size (50%)</td>
+  </tr>
+</table>
+
+<p>This system means the bot automatically bets more on the best opportunities and less on weaker ones.</p>
+
+<div class="page-break"></div>
+
+
+<!-- SECTION 6 -->
+<h2><span class="num">6</span> A Real Trade, Step by Step</h2>
+
+<p>Let's walk through exactly what happens when the bot takes a trade.</p>
+
+<div class="trade-example">
+  <h4>Example: Stock XYZ — FDA Drug Approval</h4>
+  <div class="trade-row"><span class="lbl">Previous close</span><span class="val">$4.20</span></div>
+  <div class="trade-row"><span class="lbl">Pre-market price</span><span class="val val-green">$7.80 (+85% gap)</span></div>
+  <div class="trade-row"><span class="lbl">Catalyst</span><span class="val">FDA drug approval announced 6am</span></div>
+  <div class="trade-row"><span class="lbl">Float</span><span class="val">4.2 million shares (very small)</span></div>
+  <div class="trade-row"><span class="lbl">Pre-market volume</span><span class="val">800,000 shares (huge)</span></div>
+  <div class="trade-row"><span class="lbl">Conviction rating</span><span class="val"><span class="tag tag-aplus">A+</span></span></div>
+</div>
+
+<div class="timeline">
+  <div class="tl-item">
+    <div class="tl-dot">9:30</div>
+    <div class="tl-body">
+      <strong>Market opens</strong>
+      XYZ opens at $8.10 and immediately starts climbing. The bot watches.
+    </div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot">9:33</div>
+    <div class="tl-body">
+      <strong>Breakout signal triggers</strong>
+      The stock pushes above a key resistance level ($8.50) with heavy volume. The bot enters — buying 1,200 shares at <strong>$8.52</strong>. Total position: $10,224.
+    </div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot amber">9:35</div>
+    <div class="tl-body">
+      <strong>Stop loss set</strong>
+      If the price drops back to $8.10, the bot sells immediately to limit the loss to ~$500 (1% of the account). This is the <em>worst case</em>.
+    </div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot green">9:41</div>
+    <div class="tl-body">
+      <strong>Target 1 hit — partial sell</strong>
+      Price reaches $9.10 (Target 1). The bot sells 400 shares, locking in $232 profit. The stop loss on remaining shares is moved up to breakeven ($8.52) — the trade can no longer lose money.
+    </div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot green">9:48</div>
+    <div class="tl-body">
+      <strong>Target 2 hit — sell more</strong>
+      Price reaches $9.80. Bot sells another 400 shares. Profit on these: $512.
+    </div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot green">10:02</div>
+    <div class="tl-body">
+      <strong>Runner sells — trade complete</strong>
+      The remaining 400 shares are sold at $10.20 as momentum fades. Profit on runner: $672.
+    </div>
+  </div>
+</div>
+
+<div class="trade-example">
+  <h4>Final result — XYZ trade</h4>
+  <div class="trade-row"><span class="lbl">T1 sell (400 shares @ $9.10)</span><span class="val val-green">+$232</span></div>
+  <div class="trade-row"><span class="lbl">T2 sell (400 shares @ $9.80)</span><span class="val val-green">+$512</span></div>
+  <div class="trade-row"><span class="lbl">Runner sell (400 shares @ $10.20)</span><span class="val val-green">+$672</span></div>
+  <div class="trade-row"><span class="lbl">Total profit</span><span class="val val-green">+$1,416</span></div>
+  <div class="trade-row"><span class="lbl">Maximum risk taken</span><span class="val val-red">$500</span></div>
+  <div class="trade-row"><span class="lbl">R multiple (profit / risk)</span><span class="val">+2.83R</span></div>
+  <div class="trade-row"><span class="lbl">Time in trade</span><span class="val">29 minutes</span></div>
+</div>
+
+<div class="page-break"></div>
+
+
+<!-- SECTION 7 -->
+<h2><span class="num">7</span> Risk Management — How Losses Are Controlled</h2>
+
+<p>Making money on winners is only half the equation. The other half is making sure losing trades don't wipe out the gains. The bot has several built-in protections.</p>
+
+<h3>Per-trade stop loss</h3>
+<p>Every single trade has a pre-set <strong>stop loss</strong> — a price level where the bot automatically exits if the trade goes wrong. The maximum loss on any single trade is <strong>1% of the account</strong>.</p>
+
+<div class="box box-amber">
+  <div class="box-title">Example</div>
+  Account value: $95,000 &nbsp;→&nbsp; Max loss per trade: $950. If a stock drops to the stop loss price, the bot sells instantly — the loss is capped and the account lives to fight another day.
+</div>
+
+<h3>Daily loss limit</h3>
+<p>If the bot loses more than <strong>2% of the account in a single day</strong>, all trading automatically stops for the rest of the day. There is no way to override this — it is a hard lock. This prevents a bad morning from becoming a catastrophic day.</p>
+
+<h3>Partial sells — locking in profit</h3>
+<p>Rather than selling everything at once, the bot exits in three stages (T1, T2, Runner). This means:</p>
+<ul style="margin: 0 0 12px 24px; line-height: 2;">
+  <li>Profit is secured early, even if the stock reverses</li>
+  <li>The stop loss moves to breakeven after T1 — the trade becomes risk-free</li>
+  <li>A small "runner" position is left open to capture bigger moves</li>
+</ul>
+
+<h3>11am hard cutoff</h3>
+<p>All positions are force-closed at 11am ET regardless. Momentum stocks are most predictable in the first 90 minutes. After 11am, trading becomes more random and the edge disappears — so the bot stops.</p>
+
+<div class="grid-2">
+  <div class="grid-card">
+    <div class="gc-label">Max loss per trade</div>
+    <div class="gc-value" style="color:#dc2626">1%</div>
+    <div class="gc-sub">of total account value</div>
+  </div>
+  <div class="grid-card">
+    <div class="gc-label">Daily loss limit</div>
+    <div class="gc-value" style="color:#dc2626">2%</div>
+    <div class="gc-sub">trading stops if hit</div>
+  </div>
+  <div class="grid-card">
+    <div class="gc-label">Win rate target</div>
+    <div class="gc-value" style="color:#16a34a">60%+</div>
+    <div class="gc-sub">more wins than losses</div>
+  </div>
+  <div class="grid-card">
+    <div class="gc-label">Profit target per win</div>
+    <div class="gc-value" style="color:#16a34a">2R+</div>
+    <div class="gc-sub">2× what was risked</div>
+  </div>
+</div>
+
+
+<!-- SECTION 8 -->
+<h2><span class="num">8</span> The Maths: Why It Works Over Time</h2>
+
+<p>Here is the key insight behind this strategy. You do not need to win every trade. You just need your winners to be bigger than your losers.</p>
+
+<table>
+  <tr>
+    <th>Scenario</th>
+    <th>Trades</th>
+    <th>Wins</th>
+    <th>Avg win</th>
+    <th>Avg loss</th>
+    <th>Net result</th>
+  </tr>
+  <tr>
+    <td>Typical day</td>
+    <td>4</td>
+    <td>3</td>
+    <td>+$600</td>
+    <td>-$400</td>
+    <td style="color:#16a34a; font-weight:600">+$1,400</td>
+  </tr>
+  <tr>
+    <td>Tough day</td>
+    <td>4</td>
+    <td>2</td>
+    <td>+$500</td>
+    <td>-$450</td>
+    <td style="color:#16a34a; font-weight:600">+$100</td>
+  </tr>
+  <tr>
+    <td>Bad day</td>
+    <td>3</td>
+    <td>1</td>
+    <td>+$300</td>
+    <td>-$400</td>
+    <td style="color:#dc2626; font-weight:600">-$500</td>
+  </tr>
+  <tr>
+    <td>Great day</td>
+    <td>3</td>
+    <td>3</td>
+    <td>+$1,200</td>
+    <td>—</td>
+    <td style="color:#16a34a; font-weight:600">+$3,600</td>
+  </tr>
+</table>
+
+<p>Even with a 60% win rate (6 wins out of 10 trades), if each win averages +2R and each loss is -1R, the expected profit per 10 trades is:</p>
+
+<div class="box box-green">
+  <div class="box-title">Expected value calculation</div>
+  (6 wins × +2R) − (4 losses × 1R) = +12R − 4R = <strong>+8R net profit per 10 trades</strong><br><br>
+  If 1R = $500 risk per trade, that is <strong>+$4,000 per 10 trades</strong> — on average.
+</div>
+
+<div class="page-break"></div>
+
+
+<!-- SECTION 9 -->
+<h2><span class="num">9</span> What the Bot Does Each Day</h2>
+
+<div class="timeline">
+  <div class="tl-item">
+    <div class="tl-dot">4am</div>
+    <div class="tl-body">
+      <strong>Pre-market scan begins</strong>
+      Bot scans all US stocks for overnight gaps. Filters by gap size, volume, float and catalyst.
+    </div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot">9:15am</div>
+    <div class="tl-body">
+      <strong>Watchlist sent to Telegram</strong>
+      Top 1–4 candidates are sent to your phone. Each includes: ticker, gap %, float, catalyst, conviction rating.
+    </div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot green">9:30am</div>
+    <div class="tl-body">
+      <strong>Market opens — bot armed and watching</strong>
+      The bot monitors all watchlist stocks in real-time. It waits for confirmed breakout signals before entering.
+    </div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot green">9:31–11am</div>
+    <div class="tl-body">
+      <strong>Active trading window</strong>
+      The bot enters and exits trades automatically. Partial sells at T1 and T2 lock in profit. Stop losses protect against reversals.
+    </div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot amber">11am</div>
+    <div class="tl-body">
+      <strong>Hard cutoff — all positions closed</strong>
+      Any open positions are sold. The trading day is over.
+    </div>
+  </div>
+  <div class="tl-item">
+    <div class="tl-dot">2:30pm</div>
+    <div class="tl-body">
+      <strong>Daily report sent to Telegram</strong>
+      Summary of all trades: P&L, win rate, R multiple, and a brief AI analysis of what worked and what to improve.
+    </div>
+  </div>
+</div>
+
+
+<!-- SECTION 10 -->
+<h2><span class="num">10</span> What Could Go Wrong</h2>
+
+<p>No trading strategy works every day. Here are the main risks and how the bot handles them:</p>
+
+<table>
+  <tr>
+    <th>Risk</th>
+    <th>What happens</th>
+    <th>How the bot protects you</th>
+  </tr>
+  <tr>
+    <td>Stock reverses immediately after entry</td>
+    <td>Price drops through stop loss</td>
+    <td>Automatic sell — loss capped at 1% of account</td>
+  </tr>
+  <tr>
+    <td>No good setups today</td>
+    <td>Watchlist is empty or weak</td>
+    <td>Bot stays on the sideline — not trading is also a valid outcome</td>
+  </tr>
+  <tr>
+    <td>Several losing trades in a row</td>
+    <td>Daily loss limit approached</td>
+    <td>Trading automatically halts for the day at 2% loss</td>
+  </tr>
+  <tr>
+    <td>Market-wide crash or panic</td>
+    <td>Everything drops at once</td>
+    <td>Stop losses fire on all positions; 11am cutoff prevents holding through the chaos</td>
+  </tr>
+  <tr>
+    <td>Stock halted mid-trade</td>
+    <td>Can't sell; price may resume lower</td>
+    <td>Unavoidable — affects all traders equally. Small position sizes limit damage.</td>
+  </tr>
+</table>
+
+<div class="box box-red">
+  <div class="box-title">Important note</div>
+  This is a <strong>paper trading account</strong> — no real money is at risk. All trades use simulated funds provided by Alpaca's paper trading platform. The strategy is being tested and refined before any real capital is committed.
+</div>
+
+
+<!-- FOOTER -->
+<div class="footer">
+  Ross Trading System &nbsp;·&nbsp; Gap and Go Momentum Strategy &nbsp;·&nbsp; Paper Trading Account<br>
+  Based on the methodology of Ross Cameron, Warrior Trading &nbsp;·&nbsp; For informational purposes only
+</div>
+
+</body>
+</html>
