@@ -1,11 +1,18 @@
 # ============================================================
 # config.py — Ross Cameron Momentum System
-# Edit TELEGRAM_TOKEN and TELEGRAM_CHAT_ID before running
+# Set TELEGRAM_TOKEN and TELEGRAM_CHAT_ID in the environment before running.
 # ============================================================
 
 # --- Telegram ---
-TELEGRAM_TOKEN = "8552972103:AAFLF4cIROttXUt_3vF3lC94wOliGXfFh_Q"
-TELEGRAM_CHAT_ID = None  # Set automatically on first /start command
+import os
+
+TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+_chat_id_raw = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+try:
+    TELEGRAM_CHAT_ID = int(_chat_id_raw) if _chat_id_raw else None
+except ValueError:
+    print(f"[CONFIG] TELEGRAM_CHAT_ID={_chat_id_raw!r} is not numeric; ignoring")
+    TELEGRAM_CHAT_ID = None
 
 # --- Trading Hours (Eastern) ---
 PREMARKET_START = "08:00"
@@ -16,16 +23,17 @@ EOD_CLOSE       = "15:55"
 WEEKLY_REPORT   = "16:00"  # Friday only
 
 # --- Scanner Filters ---
-MIN_PRICE = 1.00
-MAX_PRICE = 20.00
-MIN_GAP_PCT = 10.0          # percent
-MIN_PREMARKET_VOL = 100_000
-MIN_RELATIVE_VOL = 5.0      # x average
-MAX_FLOAT_HARD = 100_000_000
+# TRAINING MODE — ultra-loose filters so scanner always finds stocks
+MIN_PRICE = 0.50             # very low floor
+MAX_PRICE = 500.00           # effectively unlimited
+MIN_GAP_PCT = 2.0            # catch even small gappers
+MIN_PREMARKET_VOL = 10_000   # very low volume threshold
+MIN_RELATIVE_VOL = 1.0       # any relative volume passes
+MAX_FLOAT_HARD = 2_000_000_000  # 2B — only excludes mega-caps
 MAX_FLOAT_PREFERRED = 10_000_000
-MAX_FLOAT_ACCEPTABLE = 20_000_000
-MIN_SQUEEZE_SHORT_INT = 20.0   # percent
-HIGH_SQUEEZE_SHORT_INT = 40.0  # percent
+MAX_FLOAT_ACCEPTABLE = 500_000_000
+MIN_SQUEEZE_SHORT_INT = 5.0
+HIGH_SQUEEZE_SHORT_INT = 20.0
 
 # --- Risk Management ---
 DAILY_LOSS_PCT = 0.02        # 2% of account

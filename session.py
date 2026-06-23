@@ -49,8 +49,10 @@ class Session:
                 pass
 
     def save(self):
-        with open(config.SESSION_FILE, "w") as f:
+        tmp_file = f"{config.SESSION_FILE}.tmp"
+        with open(tmp_file, "w") as f:
             json.dump(self.__dict__, f, default=str, indent=2)
+        os.replace(tmp_file, config.SESSION_FILE)
 
     def arm(self, account_value: float):
         self.armed = True
@@ -83,9 +85,10 @@ class Session:
         return self.daily_loss_used / self.daily_loss_limit
 
     def add_position(self, ticker, entry_price, stop_loss, share_size,
-                     target1, target2, signal_type, conviction):
+                     target1, target2, signal_type, conviction, side="long"):
         self.open_positions[ticker] = {
             "ticker": ticker,
+            "side": side,
             "entry_price": entry_price,
             "stop_loss": stop_loss,
             "current_stop": stop_loss,
@@ -108,13 +111,22 @@ class Session:
             return None
         if shares is None:
             shares = pos["remaining_shares"]
-        pnl = round((exit_price - pos["entry_price"]) * shares, 2)
-        r_risk = pos["entry_price"] - pos["current_stop"]
-        r_multiple = round(pnl / (r_risk * pos["share_size"]), 2) if r_risk > 0 else 0
+        side = pos.get("side", "long")
+        if side == "short":
+            pnl = round((pos["entry_price"] - exit_price) * shares, 2)
+            r_risk = pos["current_stop"] - pos["entry_price"]
+        else:
+            pnl = round((exit_price - pos["entry_price"]) * shares, 2)
+            r_risk = pos["entry_price"] - pos["current_stop"]
+        # R is measured against the shares actually closed in this fill, not the
+        # full original size — otherwise partial scale-outs report a fraction of
+        # their true R (e.g. a clean +1.5R partial logs as ~0.5R).
+        r_multiple = round(pnl / (r_risk * shares), 2) if r_risk > 0 and shares > 0 else 0
 
         trade = {
             "date": today_str(),
             "ticker": ticker,
+            "side": side,
             "setup_type": pos["signal_type"],
             "conviction": pos["conviction"],
             "entry_time": pos["entry_time"],

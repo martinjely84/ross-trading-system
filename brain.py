@@ -5,147 +5,84 @@ import json
 import os
 from datetime import datetime, timedelta
 import pytz
+import anthropic
+import credentials
 
 ET = pytz.timezone("America/New_York")
 INSIGHTS_FILE = "insights.json"
 
 
 def understand(text: str, session) -> str:
-    t = text.lower().strip()
-    now = datetime.now(ET)
+    """Route all natural language through Claude."""
+    try:
+        client = anthropic.Anthropic(api_key=credentials.ANTHROPIC_KEY)
+        now = datetime.now(ET)
 
-    # Date / time
-    if any(w in t for w in ["what day", "what time", "what date", "whats today", "what's today"]):
-        return "It's {} - {} CT.".format(
-            now.strftime("%A, %B %d"),
-            now.strftime("%I:%M %p")
-        )
-
-    # Greetings
-    if any(w in t for w in ["hello", "hey", "hi", "morning", "good morning", "you ok", "how are you", "what's up", "whats up", "sup", "alright"]):
-        hour = now.hour
-        greeting = "Good morning" if hour < 12 else "Good afternoon" if hour < 17 else "Good evening"
-        armed = "Session armed and ready to trade." if session.armed else "Send /start 500 when you're ready."
-        return "{} Martin! {}".format(greeting, armed)
-
-    # P&L / how are we doing
-    if any(w in t for w in ["how are we", "how we doing", "how did we", "what did we make", "profit", "p&l", "pnl", "make today", "lose today", "results", "did we make"]):
-        return _pnl_summary(session)
-
-    # Account / balance
-    if any(w in t for w in ["account", "balance", "how much", "total", "worth"]):
-        return _account_summary(session)
-
-    # Trades
-    if any(w in t for w in ["trades", "how many trades", "what trades", "trade today"]):
-        return _trades_summary(session)
-
-    # Watchlist
-    if any(w in t for w in ["watchlist", "watching", "what stocks", "any stocks", "looking at"]):
-        if session.watchlist:
-            names = ["{} ({}, +{}%)".format(s["ticker"], s["conviction"], s["gap_pct"]) for s in session.watchlist[:5]]
-            return "Watching {} stocks today:\n{}".format(len(session.watchlist), "\n".join(names))
-        return "No watchlist yet. Scan runs at 7am CT or send /scan."
-
-    # Positions
-    if any(w in t for w in ["position", "in anything", "holding", "open trade"]):
-        pos = session.open_positions
-        if pos:
-            lines = []
-            for ticker, p in pos.items():
-                lines.append("{}: {} shares @ ${:.2f}, stop ${:.2f}".format(
-                    ticker, p["remaining_shares"], p["entry_price"], p["current_stop"]
-                ))
-            return "Open positions:\n" + "\n".join(lines)
-        return "No open positions right now."
-
-    # Loss limit
-    if any(w in t for w in ["limit", "how much left", "budget", "risk left", "loss limit"]):
-        if not session.armed:
-            return "Session not armed yet. Send /start 500."
-        return "Daily limit: ${:.2f} | Used: ${:.2f} | Left: ${:.2f}".format(
-            session.daily_loss_limit, session.daily_loss_used, session.daily_loss_remaining()
-        )
-
-    # Status
-    if any(w in t for w in ["suspended", "running", "active", "status", "working"]):
-        if session.trading_suspended:
-            return "Trading is suspended. Send /resume to re-enable."
-        elif not session.armed:
-            return "Not armed yet. Send /start 500."
-        return "System is active and scanning."
-
-    # Market hours
-    if any(w in t for w in ["market", "is it open", "trading today", "market open"]):
-        if now.weekday() >= 5:
-            return "Market is closed - it's the weekend."
-        open_time = now.replace(hour=8, minute=30, second=0, microsecond=0)
-        close_time = now.replace(hour=15, minute=0, second=0, microsecond=0)
-        if now < open_time:
-            mins = int((open_time - now).seconds / 60)
-            return "Market opens in {} minutes (8:30am CT).".format(mins)
-        elif now > close_time:
-            return "Market closed for today."
-        else:
-            return "Market is open. Trading window is 8:30-10:00am CT."
-
-    # Insights
-    if any(w in t for w in ["insight", "learning", "what's working", "pattern", "improving"]):
-        return _get_insights()
-
-    # Best / worst trade
-    if any(w in t for w in ["best trade", "biggest winner"]):
+        # Build session context
         trades = session.trades_today
-        if not trades:
-            return "No trades today yet."
-        best = max(trades, key=lambda x: x["pnl"])
-        return "Best trade: {} +${:.2f} ({}R)".format(best["ticker"], best["pnl"], best["r_multiple"])
+        total_pnl = sum(t["pnl"] for t in trades) if trades else 0
+        winners = len([t for t in trades if t["pnl"] > 0])
+        positions = []
+        for ticker, p in session.open_positions.items():
+            positions.append(f"{ticker}: {p['remaining_shares']} shares @ ${p['entry_price']:.2f}, stop ${p['current_stop']:.2f}")
+        watchlist = [f"{s['ticker']} ({s['conviction']}, +{s['gap_pct']}%)" for s in session.watchlist[:5]]
 
-    if any(w in t for w in ["worst trade", "biggest loss"]):
-        trades = session.trades_today
-        if not trades:
-            return "No trades today yet."
-        worst = min(trades, key=lambda x: x["pnl"])
-        return "Worst trade: {} ${:.2f} ({}R)".format(worst["ticker"], worst["pnl"], worst["r_multiple"])
+        context = f"""Current time: {now.strftime('%A %B %d, %I:%M %p')} CT
+Session armed: {session.armed}
+Account value: ${session.account_value:.2f}
+Daily loss limit: ${session.daily_loss_limit:.2f}
+Daily loss used: ${session.daily_loss_used:.2f}
+Daily loss remaining: ${session.daily_loss_remaining():.2f}
+Trading suspended: {session.trading_suspended}
+Trades today: {len(trades)} ({winners} winners, P&L ${total_pnl:.2f})
+Open positions: {', '.join(positions) if positions else 'None'}
+Watchlist: {', '.join(watchlist) if watchlist else 'Empty'}
+Market hours: 8:30am-3:00pm CT | Trading window: 8:30-10:00am CT"""
 
-    # Help
-    if any(w in t for w in ["help", "what can you", "commands", "what do you do"]):
-        return (
-            "Just talk to me naturally! Try:\n"
-            "- 'How are we doing today?'\n"
-            "- 'Any open positions?'\n"
-            "- 'What day is it?'\n"
-            "- 'Is the market open?'\n"
-            "- 'What's working this week?'\n\n"
-            "Or use: /status /scan /watchlist /suspend /resume /report"
+        system = """You are the trading assistant embedded in Martin Shearer's autonomous gap-and-go trading bot. You trade using the Ross Cameron momentum methodology on Alpaca paper trading with $500 paper account.
+
+DAILY SCHEDULE (all times CT):
+- 7:00am: Pre-market scan runs automatically via Finviz + yfinance
+- 7:30am: Reminder sent to Martin to arm the session
+- Martin sends /start 500 or /startauto to arm
+- 8:30am-10:00am: Trading window — Gap and Go signals only (A+ and A conviction)
+- 8:30am-9:30am: First Candle New High signals also valid
+- 10:00am: A+ setups only reminder sent
+- 10:45am: 15 minute cutoff warning sent
+- 11:00am: Trading window closes automatically
+- 2:30pm: Daily report + Claude AI trade review sent
+
+TRADING RULES (Ross Cameron methodology):
+- Only trade stocks with 10%+ pre-market gap
+- Must have confirmed catalyst (earnings, FDA, contract, etc)
+- Float under 100M shares (prefer under 10M)
+- Relative volume 5x+ average
+- Entry on breakout above pre-market high with 2x volume
+- Stop at candle low or VWAP
+- Target 1R and 2R
+- Daily loss limit 2% of account ($10 on $500)
+- Risk per trade 0.5% ($2.50 on $500)
+- No trading after 10:00am CT unless A+ setup
+
+SELF IMPROVEMENT:
+You are constantly learning and improving. After every session you analyse what worked and what didn't. You track patterns across sessions — which setups are winning, which conviction grades are performing, whether stops are too tight or too loose, whether the trading window needs adjusting. You proactively flag when you notice a pattern. You suggest specific rule changes with data to back them up. You never suggest a change without a reason. When Martin asks how to improve, give him something concrete and actionable, not generic advice. Over time your goal is to make this system sharper, more selective, and more profitable.
+
+You are embedded in Telegram. Keep responses concise and conversational. Plain text only — no markdown, no asterisks. Be direct and specific. Use the live session data provided to answer questions about positions, P&L, and watchlist accurately.
+
+Martin is based in Dallas-Fort Worth TX, works at BAE Systems on the F-35 program, and is building this trading system alongside his day job."""
+
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=300,
+            system=system,
+            messages=[
+                {"role": "user", "content": f"Session context:\n{context}\n\nMartin says: {text}"}
+            ]
         )
-
-    # Positive / motivational
-    if any(w in t for w in ["good day", "great day", "good first", "first day", "should be", "gonna be", "going to be", "big day", "excited", "nervous", "fired up", "pumped"]):
-        return "Absolutely. Stick to the rules, trust the system, protect the capital. Let the setups come to you."
-
-    # Ready / tomorrow
-    if any(w in t for w in ["ready", "tomorrow", "lets go", "game plan"]):
-        if session.watchlist:
-            top = session.watchlist[0]
-            return "Ready! Top pick so far is {} (+{}% gap, {}). Market opens 8:30am CT.".format(
-                top["ticker"], top["gap_pct"], top["conviction"])
-        return "Ready for tomorrow! Scan runs at 7am CT and I'll send the watchlist automatically."
-
-    # Good night / bye
-    if any(w in t for w in ["good night", "goodnight", "bye", "sleep", "night", "later", "see you"]):
-        return "Good night Martin! I'll be here at 7am CT with the watchlist. Sleep well."
-
-    # Thanks
-    if any(w in t for w in ["thanks", "thank you", "cheers", "appreciate"]):
-        return "Anytime! That's what I'm here for."
-
-    # Improvement reminders
-    if any(w in t for w in ["improve", "get better", "learn", "evolve", "upgrade", "continually"]):
-        return "Always. After every session I analyse what worked and what didn't, and flag improvements. Check /suggestions after a few trading days to see what I've learned."
-
-    # Fallback
-    return "I'm still learning conversational stuff! Try: 'how are we doing', 'any positions', 'what day is it', or just say hey."
+        return response.content[0].text.strip()
+    except Exception as e:
+        print(f"[BRAIN] Claude error: {e}")
+        return "Having trouble thinking right now — try again in a moment."
 
 
 def _pnl_summary(session) -> str:
@@ -225,15 +162,69 @@ def analyze_and_improve(session):
     insight_lines = _generate_insight_text(insights)
     suggestions = generate_improvement_suggestions(insights)
 
+    # Claude AI review
+    claude_review = _claude_trade_review(trades, insights)
+
     insights["latest_insight"] = insight_lines
     if suggestions:
         insights["latest_suggestions"] = suggestions
+    if claude_review:
+        insights["latest_claude_review"] = claude_review
     insights["last_updated"] = today
     _save_insights(insights)
 
+    result = insight_lines
     if suggestions:
-        return insight_lines + "\n\nSUGGESTIONS:\n" + "\n".join(suggestions)
-    return insight_lines
+        result += "\n\nSUGGESTIONS:\n" + "\n".join(suggestions)
+    if claude_review:
+        result += "\n\nCLAUDE REVIEW:\n" + claude_review
+    return result
+
+
+def _claude_trade_review(trades, insights):
+    try:
+        client = anthropic.Anthropic(api_key=credentials.ANTHROPIC_KEY)
+
+        history = insights.get("history", {})
+        history_summary = ""
+        if len(history) >= 2:
+            recent = sorted(history.items())[-5:]
+            for date, d in recent:
+                history_summary += f"{date}: {d['trades']} trades, P&L ${d['pnl']:.2f}, {d['winners']} winners\n"
+
+        trade_lines = ""
+        for t in trades:
+            trade_lines += (
+                f"- {t['ticker']} [{t.get('conviction','?')}] {t.get('setup_type','?')}: "
+                f"entry ${t['entry_price']:.2f} exit ${t['exit_price']:.2f} "
+                f"P&L ${t['pnl']:.2f} ({t['r_multiple']}R) reason: {t['exit_reason']}\n"
+            )
+
+        prompt = f"""You are a trading coach reviewing a day of momentum trading using the Ross Cameron gap-and-go methodology.
+
+Today's trades:
+{trade_lines}
+
+Recent session history:
+{history_summary if history_summary else 'First session - no prior history.'}
+
+In 3-5 bullet points, give specific, actionable feedback on:
+- What worked and why
+- What didn't work and why
+- One concrete rule change to consider (be specific: e.g. "raise minimum gap threshold from 5% to 8%")
+- Whether the trader should increase or decrease position size tomorrow
+
+Be direct and specific. No padding. Reference the actual trades."""
+
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=512,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return response.content[0].text.strip()
+    except Exception as e:
+        print(f"[CLAUDE REVIEW ERROR] {e}")
+        return None
 
 
 def _generate_insight_text(insights: dict) -> str:

@@ -21,29 +21,30 @@ CATALYST_KEYWORDS = [
 
 def get_finviz_gap_scanner():
     """
-    Scrape Finviz for pre-market gappers meeting basic criteria.
+    Use finvizfinance library to get pre-market gappers.
     Returns list of tickers to investigate further.
     """
-    url = (
-        "https://finviz.com/screener.ashx?v=111&f="
-        "geo_usa,exch_nasd|nyse|amex,"
-        "sh_price_o1,sh_price_u20,"
-        "sh_avgvol_o100,"
-        "ta_gap_u10"
-        "&o=-gap&ft=4"
-    )
-    headers = {"User-Agent": "Mozilla/5.0"}
     try:
-        resp = requests.get(url, headers=headers, timeout=15)
-        soup = BeautifulSoup(resp.text, "html.parser")
-        tickers = []
-        for row in soup.select("tr[id^='screener-row']"):
-            cells = row.find_all("td")
-            if cells:
-                ticker = cells[1].get_text(strip=True)
-                if ticker:
-                    tickers.append(ticker)
-        return tickers[:30]  # top 30 by gap
+        from finvizfinance.screener.overview import Overview
+        foverview = Overview()
+        foverview.set_filter(filters_dict={
+            'Gap': 'Up 2%',
+            'Country': 'USA',
+        })
+        df = foverview.screener_view()
+        if df is None or df.empty:
+            print("[SCANNER] No results from finvizfinance")
+            return []
+        # Sort by Change descending (biggest gappers first).
+        # finvizfinance may return Change as a numeric fraction OR a percent
+        # string like "5.20%"; coerce robustly so a string format doesn't blow
+        # up the whole scan and silently return zero tickers.
+        change = df['Change'].astype(str).str.replace('%', '', regex=False).str.strip()
+        df['Change'] = pd.to_numeric(change, errors='coerce')
+        df = df.dropna(subset=['Change']).sort_values('Change', ascending=False)
+        tickers = df['Ticker'].tolist()[:30]
+        print(f"[SCANNER] Found {len(tickers)} tickers from Finviz")
+        return tickers
     except Exception as e:
         print(f"[SCANNER] Finviz error: {e}")
         return []
@@ -68,10 +69,9 @@ def get_stock_data(ticker: str):
         gap_pct = ((current_price - prev_close) / prev_close) * 100
 
         # Pre-market volume — yfinance doesn't give pre-market vol directly
-        # We use regularMarketVolume as approximation before open,
-        # and preMarketPrice + volume where available
+        # Fall back to regular market volume if pre-market not available
         premarket_price = info.get("preMarketPrice") or current_price
-        premarket_vol = info.get("preMarketVolume") or 0
+        premarket_vol = info.get("preMarketVolume") or info.get("regularMarketVolume") or 0
 
         # Relative volume — compare to 30-day average
         avg_vol = info.get("averageVolume", 0) or info.get("averageDailyVolume10Day", 0)
@@ -153,33 +153,37 @@ def evaluate_stock(ticker: str):
 
     # Condition 1 — Price
     if not (config.MIN_PRICE <= data["current_price"] <= config.MAX_PRICE):
-        return None  # Hard exclude
+        failures.append(f"Price ${data['current_price']} out of range")
+        # Only hard-exclude if truly extreme (penny stock or mega-cap)
+        if data["current_price"] < 0.10 or data["current_price"] > 1000:
+            return None
 
-    # Condition 2 — Gap
+    # Condition 2 — Gap (soft filter only)
     if data["gap_pct"] < config.MIN_GAP_PCT:
-        return None
+        failures.append(f"Gap {data['gap_pct']}% < {config.MIN_GAP_PCT}%")
     if data["gap_pct"] < 0:
-        return None  # Gapping down
+        return None  # Hard exclude gapping down
 
-    # Condition 3 — Pre-market volume
+    # Condition 3 — Pre-market volume (soft filter)
     if data["premarket_vol"] < config.MIN_PREMARKET_VOL:
-        return None
+        failures.append(f"PM vol {data['premarket_vol']:,} < {config.MIN_PREMARKET_VOL:,}")
 
     # Condition 4 — Relative volume
     if data["rel_vol"] < config.MIN_RELATIVE_VOL:
         failures.append(f"RelVol {data['rel_vol']}x < 5x")
 
-    # Condition 5 — Float
+    # Condition 5 — Float (soft filter only in training mode)
     float_shares = data["float"]
     if float_shares > config.MAX_FLOAT_HARD:
-        return None  # Hard exclude
-    if float_shares > config.MAX_FLOAT_ACCEPTABLE:
-        failures.append(f"Float {float_shares/1e6:.1f}M > 20M LOWER CONVICTION")
+        failures.append(f"Float {float_shares/1e6:.0f}M — large float LOWER CONVICTION")
+    elif float_shares > config.MAX_FLOAT_ACCEPTABLE:
+        failures.append(f"Float {float_shares/1e6:.1f}M — moderate float")
 
-    # Condition 6 — Catalyst
+    # Condition 6 — Catalyst (soft filter — include with warning if no catalyst found)
     has_catalyst, catalyst_summary = check_catalyst(ticker, data)
     if not has_catalyst:
-        return None  # Hard exclude — no catalyst, no trade
+        catalyst_summary = "No confirmed catalyst — trade with caution"
+        failures.append("No catalyst confirmed")
 
     data["catalyst"] = catalyst_summary
     data["has_catalyst"] = has_catalyst

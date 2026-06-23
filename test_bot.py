@@ -2,8 +2,11 @@
 # Simple standalone bot test - run this instead of main.py to diagnose
 import requests
 import time
+import os
 
-TOKEN = "8370287942:AAGKQPIbybD3WByLiF29aqg9NxnWXLWrH-Q"
+TOKEN = os.getenv("TELEGRAM_TOKEN", "")
+if not TOKEN:
+    raise SystemExit("Set TELEGRAM_TOKEN before running test_bot.py")
 offset = None
 
 def send(chat_id, text):

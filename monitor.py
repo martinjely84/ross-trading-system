@@ -4,14 +4,22 @@
 # ============================================================
 import yfinance as yf
 import pandas as pd
+import threading
 from datetime import datetime
 import pytz
 import config
 import telegram_bot as tg
 from session import Session, et_now
 from signals import get_1min_candles, calc_vwap, calc_ema
+from executor import sell_market, get_fill_price
 
 ET = pytz.timezone("America/New_York")
+_exit_lock = threading.Lock()
+
+# Tracks exit orders that were submitted but whose fill could not be confirmed.
+# ticker -> order_id. Prevents the monitor loop from resubmitting a duplicate
+# sell every cycle (which could oversell and flip the position to short).
+_pending_exit_orders = {}
 
 
 def get_current_price(ticker: str):
@@ -23,6 +31,62 @@ def get_current_price(ticker: str):
     except Exception:
         pass
     return None
+
+
+def _execute_exit(ticker, shares, reason):
+    """Submit the broker exit and return the fill price only after a confirmed fill.
+
+    At most ONE exit order per ticker is ever outstanding. If a previous exit
+    could not be confirmed, the next cycle resolves that same order instead of
+    submitting a new sell — otherwise repeated fill-confirmation timeouts would
+    stack duplicate sells and oversell the position.
+    """
+    if shares <= 0:
+        return None
+
+    # If we already have an unconfirmed exit order for this ticker, resolve it
+    # rather than submitting another sell.
+    existing = _pending_exit_orders.get(ticker)
+    if existing:
+        status, fill = get_fill_price(existing, max_wait_secs=2)
+        if status == "filled":
+            _pending_exit_orders.pop(ticker, None)
+            return fill
+        if status == "timeout":
+            tg.send(f"🚨 EXIT STILL UNCONFIRMED — {ticker}\nPrior {reason} sell order is still pending. Not resubmitting. Check Alpaca immediately.")
+            return None
+        # status == "failed": the prior order definitely did not reduce the
+        # position; clear it and submit a fresh exit below.
+        _pending_exit_orders.pop(ticker, None)
+
+    order = sell_market(ticker, shares)
+    if not order or not order.get("id"):
+        tg.send(f"🚨 EXIT FAILED — {ticker}\nCould not submit {reason} sell order. Check Alpaca immediately.")
+        return None
+
+    status, fill = get_fill_price(order["id"])
+    if status == "filled":
+        return fill
+
+    if status == "timeout":
+        # Outcome unknown — the order may have filled. Remember it so the next
+        # cycle resolves it instead of submitting a duplicate sell.
+        _pending_exit_orders[ticker] = order["id"]
+        tg.send(f"🚨 EXIT UNCONFIRMED — {ticker}\n{reason} order was submitted but fill was not confirmed. Will resolve before any retry. Check Alpaca immediately.")
+    else:
+        tg.send(f"🚨 EXIT REJECTED — {ticker}\n{reason} sell order did not fill (status={status}). Check Alpaca immediately.")
+    return None
+
+
+def _close_with_broker(session, ticker, shares, reason):
+    pos = session.open_positions.get(ticker)
+    if not pos:
+        return None
+    shares = min(int(shares), int(pos.get("remaining_shares", shares)))
+    fill = _execute_exit(ticker, shares, reason)
+    if fill is None:
+        return None
+    return session.close_position(ticker, fill, reason, shares=shares)
 
 
 def monitor_position(ticker: str, session: Session):
@@ -64,13 +128,13 @@ def monitor_position(ticker: str, session: Session):
 
     # EXIT TRIGGER 1 — STOP LOSS HIT
     if current_candle["Close"] < current_stop:
-        trade = session.close_position(ticker, current_close, "Stop Loss")
+        trade = _close_with_broker(session, ticker, remaining, "Stop Loss")
         if trade:
             tg.send_exit({
                 "trigger": "🛑 STOP LOSS HIT — FULL EXIT",
                 "ticker": ticker,
                 "action": "SELL ALL",
-                "exit_price": current_close,
+                "exit_price": trade["exit_price"],
                 "pnl": trade["pnl"],
                 "r_multiple": trade["r_multiple"],
                 "daily_loss_used": session.daily_loss_used,
@@ -83,13 +147,13 @@ def monitor_position(ticker: str, session: Session):
     if current_candle["Close"] < current_vwap:
         # Only if VWAP break is not already below stop (stop takes priority)
         if current_vwap > current_stop:
-            trade = session.close_position(ticker, current_close, "VWAP Break")
+            trade = _close_with_broker(session, ticker, remaining, "VWAP Break")
             if trade:
                 tg.send_exit({
                     "trigger": "📉 VWAP BREAK — FULL EXIT",
                     "ticker": ticker,
                     "action": "SELL ALL",
-                    "exit_price": current_close,
+                    "exit_price": trade["exit_price"],
                     "pnl": trade["pnl"],
                     "r_multiple": trade["r_multiple"],
                     "daily_loss_used": session.daily_loss_used,
@@ -100,8 +164,10 @@ def monitor_position(ticker: str, session: Session):
 
     # EXIT TRIGGER 3 — TARGET 1 HIT
     if not pos["t1_hit"] and current_close >= pos["target1"]:
-        shares_to_sell = remaining // 2
-        trade = session.close_position(ticker, current_close, "Target 1", shares=shares_to_sell)
+        shares_to_sell = max(1, remaining // 2)
+        trade = _close_with_broker(session, ticker, shares_to_sell, "Target 1")
+        if not trade:
+            return
         pos = session.open_positions.get(ticker)
         if pos:
             # Move stop to breakeven
@@ -111,7 +177,7 @@ def monitor_position(ticker: str, session: Session):
             session.save()
         tg.send(
             f"🎯 TARGET 1 HIT — SOLD 50%\n"
-            f"<b>{ticker}</b> @ ${current_close:.2f}\n"
+            f"<b>{ticker}</b> @ ${trade['exit_price']:.2f}\n"
             f"Partial gain: ${trade['pnl'] if trade else '?':.2f}\n"
             f"Stop moved to breakeven: ${entry_price:.2f}\n"
             f"Remaining: {pos['remaining_shares'] if pos else 0} shares"
@@ -121,15 +187,17 @@ def monitor_position(ticker: str, session: Session):
     # EXIT TRIGGER 4 — TARGET 2 HIT
     if pos.get("t1_hit") and not pos.get("t2_hit") and current_close >= pos["target2"]:
         remaining = pos["remaining_shares"]
-        shares_to_sell = remaining // 2
-        trade = session.close_position(ticker, current_close, "Target 2", shares=shares_to_sell)
+        shares_to_sell = max(1, remaining // 2)
+        trade = _close_with_broker(session, ticker, shares_to_sell, "Target 2")
+        if not trade:
+            return
         pos = session.open_positions.get(ticker)
         if pos:
             session.open_positions[ticker]["t2_hit"] = True
             session.save()
         tg.send(
             f"🎯🎯 TARGET 2 HIT — SOLD 25%\n"
-            f"<b>{ticker}</b> @ ${current_close:.2f}\n"
+            f"<b>{ticker}</b> @ ${trade['exit_price']:.2f}\n"
             f"Partial gain: ${trade['pnl'] if trade else '?':.2f}\n"
             f"🏃 RUNNER ACTIVE: {pos['remaining_shares'] if pos else 0} shares\n"
             f"Stop at breakeven: ${entry_price:.2f}"
@@ -163,17 +231,18 @@ def monitor_position(ticker: str, session: Session):
                 runner_exit_reason = "11am — no new high in 10 minutes"
 
         if runner_exit_reason:
-            trade = session.close_position(ticker, current_close, "Runner Exit")
-            tg.send_exit({
-                "trigger": f"🏃 RUNNER EXIT — {runner_exit_reason}",
-                "ticker": ticker,
-                "action": "SELL ALL remaining",
-                "exit_price": current_close,
-                "pnl": trade["pnl"] if trade else 0,
-                "r_multiple": trade["r_multiple"] if trade else 0,
-                "daily_loss_used": session.daily_loss_used,
-                "daily_loss_limit": session.daily_loss_limit,
-            })
+            trade = _close_with_broker(session, ticker, pos.get("remaining_shares", 0), "Runner Exit")
+            if trade:
+                tg.send_exit({
+                    "trigger": f"🏃 RUNNER EXIT — {runner_exit_reason}",
+                    "ticker": ticker,
+                    "action": "SELL ALL remaining",
+                    "exit_price": trade["exit_price"],
+                    "pnl": trade["pnl"],
+                    "r_multiple": trade["r_multiple"],
+                    "daily_loss_used": session.daily_loss_used,
+                    "daily_loss_limit": session.daily_loss_limit,
+                })
             return
 
     # EXIT TRIGGER 6 — TIME STOP WARNING (15 min, no T1, no new high)
@@ -199,33 +268,35 @@ def monitor_position(ticker: str, session: Session):
     # EXIT TRIGGER 7 — HARD 11AM STOP
     hard_stop_time = now.replace(hour=11, minute=0, second=0, microsecond=0)
     if now >= hard_stop_time and current_close < entry_price:
-        trade = session.close_position(ticker, current_close, "Hard 11am Stop")
-        tg.send_exit({
-            "trigger": "🕚 HARD TIME STOP — 11AM RULE",
-            "ticker": ticker,
-            "action": "SELL ALL",
-            "exit_price": current_close,
-            "pnl": trade["pnl"] if trade else 0,
-            "r_multiple": trade["r_multiple"] if trade else 0,
-            "daily_loss_used": session.daily_loss_used,
-            "daily_loss_limit": session.daily_loss_limit,
-        })
+        trade = _close_with_broker(session, ticker, remaining, "Hard 11am Stop")
+        if trade:
+            tg.send_exit({
+                "trigger": "🕚 HARD TIME STOP — 11AM RULE",
+                "ticker": ticker,
+                "action": "SELL ALL",
+                "exit_price": trade["exit_price"],
+                "pnl": trade["pnl"],
+                "r_multiple": trade["r_multiple"],
+                "daily_loss_used": session.daily_loss_used,
+                "daily_loss_limit": session.daily_loss_limit,
+            })
         return
 
     # EXIT TRIGGER 8 — END OF DAY
     eod_time = now.replace(hour=15, minute=55, second=0, microsecond=0)
     if now >= eod_time:
-        trade = session.close_position(ticker, current_close, "End of Day")
-        tg.send_exit({
-            "trigger": "🔔 END OF DAY CLOSE",
-            "ticker": ticker,
-            "action": "SELL ALL",
-            "exit_price": current_close,
-            "pnl": trade["pnl"] if trade else 0,
-            "r_multiple": trade["r_multiple"] if trade else 0,
-            "daily_loss_used": session.daily_loss_used,
-            "daily_loss_limit": session.daily_loss_limit,
-        })
+        trade = _close_with_broker(session, ticker, remaining, "End of Day")
+        if trade:
+            tg.send_exit({
+                "trigger": "🔔 END OF DAY CLOSE",
+                "ticker": ticker,
+                "action": "SELL ALL",
+                "exit_price": trade["exit_price"],
+                "pnl": trade["pnl"],
+                "r_multiple": trade["r_multiple"],
+                "daily_loss_used": session.daily_loss_used,
+                "daily_loss_limit": session.daily_loss_limit,
+            })
 
 
 def _check_daily_limit(session: Session):
@@ -263,4 +334,6 @@ def _check_daily_limit(session: Session):
 def monitor_all_positions(session: Session):
     """Run monitor loop for all open positions."""
     for ticker in list(session.open_positions.keys()):
-        monitor_position(ticker, session)
+        with _exit_lock:
+            if ticker in session.open_positions:
+                monitor_position(ticker, session)

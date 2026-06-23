@@ -11,23 +11,15 @@ _chat_id_cache = None
 
 def _get_chat_id():
     global _chat_id_cache
+    if not config.TELEGRAM_TOKEN:
+        print("[TELEGRAM] TELEGRAM_TOKEN is not configured")
+        return None
     if _chat_id_cache:
         return _chat_id_cache
     if config.TELEGRAM_CHAT_ID:
         _chat_id_cache = config.TELEGRAM_CHAT_ID
         return _chat_id_cache
-    # Auto-detect from first message in getUpdates
-    try:
-        resp = requests.get(
-            f"https://api.telegram.org/bot{config.TELEGRAM_TOKEN}/getUpdates",
-            timeout=10
-        )
-        data = resp.json()
-        if data.get("result"):
-            _chat_id_cache = data["result"][-1]["message"]["chat"]["id"]
-            return _chat_id_cache
-    except Exception:
-        pass
+    print("[TELEGRAM] TELEGRAM_CHAT_ID is not configured")
     return None
 
 
@@ -93,6 +85,8 @@ def send_exit(exit_dict: dict):
 
 
 def get_updates(offset=None):
+    if not config.TELEGRAM_TOKEN:
+        return []
     params = {"timeout": 0, "limit": 10}
     if offset:
         params["offset"] = offset
